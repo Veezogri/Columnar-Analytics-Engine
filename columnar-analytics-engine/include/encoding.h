@@ -59,6 +59,14 @@ public:
     static size_t encodeInt32(int32_t value, uint8_t* output);
     static size_t encodeInt64(int64_t value, uint8_t* output);
 
+    // C2 fix: Bounded decode functions with buffer size validation
+    // These are the safe versions that should be used for all new code
+    static uint32_t decodeUInt32Safe(const uint8_t* data, size_t buffer_size, size_t* bytes_read);
+    static int32_t decodeInt32Safe(const uint8_t* data, size_t buffer_size, size_t* bytes_read);
+    static int64_t decodeInt64Safe(const uint8_t* data, size_t buffer_size, size_t* bytes_read);
+
+    // Legacy unbounded versions - DEPRECATED: use Safe versions instead
+    // These remain for backward compatibility but assume trusted input
     static uint32_t decodeUInt32(const uint8_t* data, size_t* bytes_read);
     static int32_t decodeInt32(const uint8_t* data, size_t* bytes_read);
     static int64_t decodeInt64(const uint8_t* data, size_t* bytes_read);
