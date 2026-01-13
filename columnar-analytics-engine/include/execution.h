@@ -11,6 +11,7 @@
 #include <memory>
 #include <variant>
 #include <functional>
+#include <optional>
 
 namespace columnar {
 
