@@ -348,7 +348,7 @@ void FileWriter::flushRowGroup() {
 
     for (size_t col_idx = 0; col_idx < impl_->schema.columns.size(); col_idx++) {
         ColumnChunkMeta cc_meta;
-        cc_meta.file_offset = impl_->file.tellp();
+        cc_meta.file_offset = static_cast<uint64_t>(impl_->file.tellp());
 
         const auto& encoded = impl_->pending_columns[col_idx];
         const auto& stats = impl_->pending_stats[col_idx];
@@ -391,7 +391,7 @@ void FileWriter::close() {
     metadata.row_groups = impl_->row_groups;
     metadata.total_rows = impl_->total_rows;
 
-    uint64_t metadata_offset = impl_->file.tellp();
+    uint64_t metadata_offset = static_cast<uint64_t>(impl_->file.tellp());
     impl_->writeMetadata(metadata);
 
     writeUInt32(impl_->file, FOOTER_MAGIC);
