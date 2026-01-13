@@ -36,6 +36,58 @@ size_t VarintCodec::encodeInt64(int64_t value, uint8_t* output) {
     return pos;
 }
 
+// C2 fix: Safe bounded varint decoding with buffer size validation
+uint32_t VarintCodec::decodeUInt32Safe(const uint8_t* data, size_t buffer_size, size_t* bytes_read) {
+    constexpr size_t MAX_VARINT32_BYTES = 5;  // 32 bits / 7 bits per byte = 5 bytes max
+    uint32_t result = 0;
+    int shift = 0;
+    size_t pos = 0;
+
+    while (pos < buffer_size && shift < 32) {
+        uint8_t byte = data[pos++];
+        result |= static_cast<uint32_t>(byte & 0x7F) << shift;
+        if ((byte & 0x80) == 0) {
+            if (bytes_read) *bytes_read = pos;
+            return result;
+        }
+        shift += 7;
+        if (pos >= MAX_VARINT32_BYTES) {
+            throw std::runtime_error("Varint overflow: more than 5 bytes for uint32");
+        }
+    }
+
+    throw std::runtime_error("Truncated varint: unexpected end of buffer");
+}
+
+int32_t VarintCodec::decodeInt32Safe(const uint8_t* data, size_t buffer_size, size_t* bytes_read) {
+    uint32_t encoded = decodeUInt32Safe(data, buffer_size, bytes_read);
+    return static_cast<int32_t>((encoded >> 1) ^ -(encoded & 1));
+}
+
+int64_t VarintCodec::decodeInt64Safe(const uint8_t* data, size_t buffer_size, size_t* bytes_read) {
+    constexpr size_t MAX_VARINT64_BYTES = 10;  // 64 bits / 7 bits per byte = 10 bytes max
+    uint64_t result = 0;
+    int shift = 0;
+    size_t pos = 0;
+
+    while (pos < buffer_size && shift < 64) {
+        uint8_t byte = data[pos++];
+        result |= static_cast<uint64_t>(byte & 0x7F) << shift;
+        if ((byte & 0x80) == 0) {
+            if (bytes_read) *bytes_read = pos;
+            int64_t decoded = static_cast<int64_t>((result >> 1) ^ -(result & 1));
+            return decoded;
+        }
+        shift += 7;
+        if (pos >= MAX_VARINT64_BYTES) {
+            throw std::runtime_error("Varint overflow: more than 10 bytes for int64");
+        }
+    }
+
+    throw std::runtime_error("Truncated varint: unexpected end of buffer");
+}
+
+// Legacy unbounded versions - DEPRECATED: use Safe versions instead
 uint32_t VarintCodec::decodeUInt32(const uint8_t* data, size_t* bytes_read) {
     uint32_t result = 0;
     int shift = 0;
@@ -154,14 +206,15 @@ std::vector<int32_t> RLEEncoder::decodeInt32(const uint8_t* data, size_t size, s
     size_t pos = 0;
     size_t bytes_read = 0;
 
-    uint32_t num_runs = VarintCodec::decodeUInt32(data + pos, &bytes_read);
+    // C2 fix: Use safe bounded varint decoding
+    uint32_t num_runs = VarintCodec::decodeUInt32Safe(data + pos, size - pos, &bytes_read);
     pos += bytes_read;
 
     for (uint32_t i = 0; i < num_runs; i++) {
-        uint32_t run_length = VarintCodec::decodeUInt32(data + pos, &bytes_read);
+        uint32_t run_length = VarintCodec::decodeUInt32Safe(data + pos, size - pos, &bytes_read);
         pos += bytes_read;
 
-        int32_t value = VarintCodec::decodeInt32(data + pos, &bytes_read);
+        int32_t value = VarintCodec::decodeInt32Safe(data + pos, size - pos, &bytes_read);
         pos += bytes_read;
 
         for (uint32_t j = 0; j < run_length; j++) {
@@ -179,14 +232,15 @@ std::vector<int64_t> RLEEncoder::decodeInt64(const uint8_t* data, size_t size, s
     size_t pos = 0;
     size_t bytes_read = 0;
 
-    uint32_t num_runs = VarintCodec::decodeUInt32(data + pos, &bytes_read);
+    // C2 fix: Use safe bounded varint decoding
+    uint32_t num_runs = VarintCodec::decodeUInt32Safe(data + pos, size - pos, &bytes_read);
     pos += bytes_read;
 
     for (uint32_t i = 0; i < num_runs; i++) {
-        uint32_t run_length = VarintCodec::decodeUInt32(data + pos, &bytes_read);
+        uint32_t run_length = VarintCodec::decodeUInt32Safe(data + pos, size - pos, &bytes_read);
         pos += bytes_read;
 
-        int64_t value = VarintCodec::decodeInt64(data + pos, &bytes_read);
+        int64_t value = VarintCodec::decodeInt64Safe(data + pos, size - pos, &bytes_read);
         pos += bytes_read;
 
         for (uint32_t j = 0; j < run_length; j++) {
@@ -263,12 +317,13 @@ std::vector<int32_t> DeltaEncoder::decodeInt32(const uint8_t* data, size_t size,
     size_t pos = sizeof(int32_t);
     size_t bytes_read = 0;
 
-    uint32_t num_deltas = VarintCodec::decodeUInt32(data + pos, &bytes_read);
+    // C2 fix: Use safe bounded varint decoding
+    uint32_t num_deltas = VarintCodec::decodeUInt32Safe(data + pos, size - pos, &bytes_read);
     pos += bytes_read;
 
     int32_t current = base;
     for (uint32_t i = 0; i < num_deltas; i++) {
-        int32_t delta = VarintCodec::decodeInt32(data + pos, &bytes_read);
+        int32_t delta = VarintCodec::decodeInt32Safe(data + pos, size - pos, &bytes_read);
         pos += bytes_read;
         current += delta;
         result.push_back(current);
@@ -290,12 +345,13 @@ std::vector<int64_t> DeltaEncoder::decodeInt64(const uint8_t* data, size_t size,
     size_t pos = sizeof(int64_t);
     size_t bytes_read = 0;
 
-    uint32_t num_deltas = VarintCodec::decodeUInt32(data + pos, &bytes_read);
+    // C2 fix: Use safe bounded varint decoding
+    uint32_t num_deltas = VarintCodec::decodeUInt32Safe(data + pos, size - pos, &bytes_read);
     pos += bytes_read;
 
     int64_t current = base;
     for (uint32_t i = 0; i < num_deltas; i++) {
-        int64_t delta = VarintCodec::decodeInt64(data + pos, &bytes_read);
+        int64_t delta = VarintCodec::decodeInt64Safe(data + pos, size - pos, &bytes_read);
         pos += bytes_read;
         current += delta;
         result.push_back(current);

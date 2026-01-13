@@ -28,65 +28,101 @@ bool Schema::hasColumn(const std::string& name) const {
                       [&name](const ColumnSchema& col) { return col.name == name; });
 }
 
-// Write helpers
+// Write helpers (C3 fix: added I/O error checking)
 static void writeUInt32(std::ofstream& out, uint32_t value) {
     out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    if (!out) {
+        throw std::runtime_error("Failed to write uint32");
+    }
 }
 
 static void writeUInt64(std::ofstream& out, uint64_t value) {
     out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    if (!out) {
+        throw std::runtime_error("Failed to write uint64");
+    }
 }
 
 static void writeInt32(std::ofstream& out, int32_t value) {
     out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    if (!out) {
+        throw std::runtime_error("Failed to write int32");
+    }
 }
 
 static void writeInt64(std::ofstream& out, int64_t value) {
     out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    if (!out) {
+        throw std::runtime_error("Failed to write int64");
+    }
 }
 
 static void writeUInt16(std::ofstream& out, uint16_t value) {
     out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    if (!out) {
+        throw std::runtime_error("Failed to write uint16");
+    }
 }
 
 static void writeUInt8(std::ofstream& out, uint8_t value) {
     out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+    if (!out) {
+        throw std::runtime_error("Failed to write uint8");
+    }
 }
 
-// Read helpers
+// Read helpers (C3 fix: added I/O error checking)
 static uint32_t readUInt32(std::ifstream& in) {
     uint32_t value;
     in.read(reinterpret_cast<char*>(&value), sizeof(value));
+    if (!in) {
+        throw std::runtime_error("Failed to read uint32");
+    }
     return value;
 }
 
 static uint64_t readUInt64(std::ifstream& in) {
     uint64_t value;
     in.read(reinterpret_cast<char*>(&value), sizeof(value));
+    if (!in) {
+        throw std::runtime_error("Failed to read uint64");
+    }
     return value;
 }
 
 static int32_t readInt32(std::ifstream& in) {
     int32_t value;
     in.read(reinterpret_cast<char*>(&value), sizeof(value));
+    if (!in) {
+        throw std::runtime_error("Failed to read int32");
+    }
     return value;
 }
 
 static int64_t readInt64(std::ifstream& in) {
     int64_t value;
     in.read(reinterpret_cast<char*>(&value), sizeof(value));
+    if (!in) {
+        throw std::runtime_error("Failed to read int64");
+    }
     return value;
 }
 
 static uint16_t readUInt16(std::ifstream& in) {
     uint16_t value;
     in.read(reinterpret_cast<char*>(&value), sizeof(value));
+    if (!in) {
+        throw std::runtime_error("Failed to read uint16");
+    }
     return value;
 }
 
 static uint8_t readUInt8(std::ifstream& in) {
     uint8_t value;
     in.read(reinterpret_cast<char*>(&value), sizeof(value));
+    if (!in) {
+        throw std::runtime_error("Failed to read uint8");
+    }
     return value;
 }
 
@@ -415,6 +451,13 @@ struct FileReader::Impl {
             throw std::runtime_error("Failed to open file for reading: " + path);
         }
 
+        // C4/H2 fix: Validate file size before seeking
+        file.seekg(0, std::ios::end);
+        auto file_size = static_cast<uint64_t>(file.tellg());
+        if (file_size < 12) {
+            throw std::runtime_error("File too small to be valid columnar file (minimum 12 bytes required)");
+        }
+
         file.seekg(-12, std::ios::end);
         uint32_t footer_magic = readUInt32(file);
         if (footer_magic != FOOTER_MAGIC) {
@@ -422,6 +465,11 @@ struct FileReader::Impl {
         }
 
         uint64_t metadata_offset = readUInt64(file);
+
+        // C4/H2 fix: Validate metadata offset is within file bounds
+        if (metadata_offset >= file_size) {
+            throw std::runtime_error("Invalid metadata offset: points beyond end of file");
+        }
 
         file.seekg(0);
         uint32_t file_magic = readUInt32(file);
@@ -437,6 +485,9 @@ struct FileReader::Impl {
         }
 
         file.seekg(metadata_offset);
+        if (!file) {
+            throw std::runtime_error("Failed to seek to metadata offset");
+        }
         readMetadata();
     }
 
