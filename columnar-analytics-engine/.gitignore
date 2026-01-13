@@ -1,0 +1,27 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Artifacts
+*.o
+*.a
+*.so
+*.exe
+*.out
+
+# Benchmark results
+results/
+*.csv
+*.json
+
+# OS
+.DS_Store
+Thumbs.db
